@@ -1,0 +1,4 @@
+*.csv
+*.xyz
+!/lindemann criterion/data/*.xyz
+!/lindemann criterion/data/*.csv
