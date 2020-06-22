@@ -2,6 +2,7 @@ import math
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import glob
 
 COORDS = 0
 VELOCITY = 1
@@ -16,14 +17,9 @@ def get_column(a, b):
 
 files_path = 'data/'
 files_format = '.xyz'
-files = [
-    'FCC_B_1_0_A_1_5',
-    'FCC_B_1_5_A_1_5',
-    'FCC_B_2_A_0_5',
-    'FCC_B_2_A_1_0',
-    'FCC_B_2_A_1_5',
-    'FCC_LJ'
-]
+
+files = glob.glob(files_path + "*" + files_format)
+files = [(f.split(files_path)[1]).split(files_format)[0] for f in files]
 
 figure_full_acc = make_subplots(rows=len(files), cols=1)
 figure_axis_acc = make_subplots(rows=len(files), cols=1)
