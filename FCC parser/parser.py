@@ -3,8 +3,6 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import glob
-import scipy.spatial.distance
-from sklearn.metrics import pairwise_distances
 from numba import njit, jit, cuda
 
 SIZE = 8.5 / 2
@@ -156,7 +154,7 @@ for index, file_name in enumerate(files):
     figure_axis_acc.add_trace(go.Histogram(x=a_axis, name=file_name), row = index + 1, col = 1)
     figure_full_acc.add_trace(go.Histogram(x=a, name=file_name), row = index + 1, col = 1)
     k = (P_COUNT ** 2) * FRAMES_COUNT *  (SIZE ** 3) * 8
-    figure_g_r.add_trace(go.Scatter(x=[i / R_STEPS * R_MAX + 0.5 * R_MAX / R_STEPS  for i in range(0, R_STEPS)], y=g / k), mode="markers", name=file_name), row = index + 1, col = 1)
+    figure_g_r.add_trace(go.Scatter(x=[i / R_STEPS * R_MAX + 0.5 * R_MAX / R_STEPS  for i in range(0, R_STEPS)], y=g / k, mode="markers", name=file_name), row = index + 1, col = 1)
 
 figure_full_acc.update_layout(height=700 * len(files), title = "Acc module distribution")
 figure_full_acc.show()
