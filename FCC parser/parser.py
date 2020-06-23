@@ -45,8 +45,9 @@ files = [(f.split(files_path)[1]).split(files_format)[0] for f in files]
 
 figure_full_acc = make_subplots(rows=len(files), cols=1)
 figure_axis_acc = make_subplots(rows=len(files), cols=1)
+figure_g_r = make_subplots(rows=len(files), cols=1)
 
-R_MIN = 0.0001
+R_MIN = 0
 R_MAX = (SIZE / 2)
 R_STEPS = 100
 g = np.empty([R_STEPS], dtype=float)
@@ -102,8 +103,13 @@ for index, file_name in enumerate(files):
 
     figure_axis_acc.add_trace(go.Histogram(x=a_axis, name=file_name), row = index + 1, col = 1)
     figure_full_acc.add_trace(go.Histogram(x=a, name=file_name), row = index + 1, col = 1)
+    figure_g_r.add_trace(go.Scatter(x=[i / R_STEPS * (R_MAX - R_MIN) for i in range(0, R_STEPS)], y=g, mode="markers", name=file_name), row = index + 1, col = 1)
+
 figure_full_acc.update_layout(height=700 * len(files), title = "Acc module distribution")
 figure_full_acc.show()
 
 figure_axis_acc.update_layout(height=700 * len(files), title = "Acc value distribution")
 figure_axis_acc.show()
+
+figure_axis_acc.update_layout(height=700 * len(files), title = "g(r)")
+figure_g_r.show()
