@@ -47,10 +47,18 @@ figure_full_acc = make_subplots(rows=len(files), cols=1)
 figure_axis_acc = make_subplots(rows=len(files), cols=1)
 figure_g_r = make_subplots(rows=len(files), cols=1)
 
-R_MIN = 0
+R_MIN = 0.01
 R_MAX = (SIZE / 2)
-R_STEPS = 100
-g = np.empty([R_STEPS], dtype=float)
+R_STEPS = 1000
+g = np.zeros([R_STEPS], dtype=float)
+v = np.zeros([R_STEPS], dtype=float)
+b = np.zeros([R_STEPS + 1], dtype=float)
+
+for i in range(0, R_STEPS + 1):
+    b[i] = R_MIN + (R_MAX - R_MIN) / R_STEPS * i
+
+for i in range(0, R_STEPS):
+    v[i] = 1 / (4/3 * 3.14 * (b[i + 1] ** 3 - b[i] ** 3)) 
 
 for index, file_name in enumerate(files):
     xyz = open(files_path + file_name + files_format, 'r').readlines()
@@ -82,9 +90,9 @@ for index, file_name in enumerate(files):
         get_pairwise_matrix[blockspergrid, threadsperblock](pos, P_COUNT, dists)
 
         for d in dists:
-            h, b = np.histogram(d, bins=R_STEPS)
-            g = np.add(g, h / (FRAMES_COUNT * P_COUNT))
-            
+            h, b = np.histogram(d, bins=R_STEPS, range=(R_MIN, R_MAX))
+            g = np.add(g, h * v)
+   
     a = np.sqrt(
         np.add(
             np.square(data[0:FRAMES_COUNT, 0:P_COUNT, get_column(ACC, X)]), 
@@ -103,7 +111,7 @@ for index, file_name in enumerate(files):
 
     figure_axis_acc.add_trace(go.Histogram(x=a_axis, name=file_name), row = index + 1, col = 1)
     figure_full_acc.add_trace(go.Histogram(x=a, name=file_name), row = index + 1, col = 1)
-    figure_g_r.add_trace(go.Scatter(x=[i / R_STEPS * (R_MAX - R_MIN) for i in range(0, R_STEPS)], y=g, mode="markers", name=file_name), row = index + 1, col = 1)
+    figure_g_r.add_trace(go.Scatter(x=[i / R_STEPS * (R_MAX - R_MIN) + 0.5 * (R_MAX - R_MIN) / R_STEPS  for i in range(0, R_STEPS)], y=g, mode="markers", name=file_name), row = index + 1, col = 1)
 
 figure_full_acc.update_layout(height=700 * len(files), title = "Acc module distribution")
 figure_full_acc.show()
