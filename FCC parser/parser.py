@@ -3,8 +3,11 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import glob
+import scipy.spatial.distance
 
-COORDS = 0
+SIZE=8.5
+
+POS = 0
 VELOCITY = 1
 ACC = 2
 
@@ -38,6 +41,21 @@ for index, file_name in enumerate(files):
         for particle in range(0, P_COUNT):
             line = frame * (P_COUNT + 2) + (particle + 2)
             data[frame][particle] = (xyz[line]).split()
+    
+    print(data)    
+
+    for frame in range(0, FRAMES_COUNT):
+        pos = np.empty([P_COUNT, 3], dtype=float)
+        pos = np.vstack((
+            data[frame, 0:P_COUNT, get_column(POS, X)], 
+            data[frame, 0:P_COUNT, get_column(POS, Y)], 
+            data[frame, 0:P_COUNT, get_column(POS, Z)]
+        )).T
+        
+        Y = scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(pos[0:P_COUNT], 'euclidean'))
+        print(Y)
+        print(pos)
+        print(data)
 
     a = np.sqrt(
         np.add(
