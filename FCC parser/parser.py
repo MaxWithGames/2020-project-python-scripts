@@ -17,8 +17,38 @@ X = 0
 Y = 1
 Z = 2
 
+R_MAX = (SIZE / 2)
+R_STEPS = 1000
+
 def get_column(a, b):
     return 3 * a + b
+
+def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
+    """
+    Call in a loop to create terminal progress bar
+    @params:
+        iteration   - Required  : current iteration (Int)
+        total       - Required  : total iterations (Int)
+        prefix      - Optional  : prefix string (Str)
+        suffix      - Optional  : suffix string (Str)
+        decimals    - Optional  : positive number of decimals in percent complete (Int)
+        length      - Optional  : character length of bar (Int)
+        fill        - Optional  : bar fill character (Str)
+        printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
+    """
+    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+    filledLength = int(length * iteration // total)
+    bar = fill * filledLength + '-' * (length - filledLength)
+    print(f'\r{prefix} |{bar}| {percent}% {suffix}', end = printEnd)
+    # Print New Line on Complete
+    if iteration == total: 
+        print()
+
+def skip_diag_strided(A):
+    m = A.shape[0]
+    strided = np.lib.stride_tricks.as_strided
+    s0,s1 = A.strides
+    return strided(A.ravel()[1:], shape=(m-1,m), strides=(s0+s1,s1)).reshape(m,-1)
 
 @cuda.jit
 def get_pairwise_matrix(p, count, res):
@@ -37,6 +67,18 @@ def get_pairwise_matrix(p, count, res):
         d3 = d3 - int(d3)
         res[idx][i] = ((d1*d1 + d2*d2 + d3*d3) ** (0.5)) * SIZE
 
+@cuda.jit
+def get_g_r(d, count, res):
+    tx = cuda.threadIdx.x
+    ty = cuda.blockIdx.x
+    bw = cuda.blockDim.x
+    idx = tx + ty * bw
+    
+    for i in range(0, count - 1):
+        j = int(d[idx][i] / R_MAX * R_STEPS)
+        if j < R_STEPS:
+            res[idx][j] = res[idx][j] + 1
+
 files_path = 'data/'
 files_format = '.xyz'
 
@@ -47,15 +89,12 @@ figure_full_acc = make_subplots(rows=len(files), cols=1)
 figure_axis_acc = make_subplots(rows=len(files), cols=1)
 figure_g_r = make_subplots(rows=len(files), cols=1)
 
-R_MIN = 0.01
-R_MAX = (SIZE / 2)
-R_STEPS = 1000
 g = np.zeros([R_STEPS], dtype=float)
 v = np.zeros([R_STEPS], dtype=float)
 b = np.zeros([R_STEPS + 1], dtype=float)
 
 for i in range(0, R_STEPS + 1):
-    b[i] = R_MIN + (R_MAX - R_MIN) / R_STEPS * i
+    b[i] = R_MAX / R_STEPS * i
 
 for i in range(0, R_STEPS):
     v[i] = 1 / (4/3 * 3.14 * (b[i + 1] ** 3 - b[i] ** 3)) 
@@ -80,7 +119,11 @@ for index, file_name in enumerate(files):
     threadsperblock = 32
     blockspergrid = (P_COUNT + (threadsperblock - 1)) // threadsperblock
     for frame in range(0, FRAMES_COUNT):
-        print(frame)
+        if (frame < FRAMES_COUNT - 1):
+            printProgressBar(frame + 1, FRAMES_COUNT, prefix = 'g(r)')
+        else:
+            printProgressBar(frame + 1, FRAMES_COUNT, prefix = 'g(r)', printEnd="\n")
+
         pos = np.vstack((
             data[frame, 0:P_COUNT, get_column(POS, X)], 
             data[frame, 0:P_COUNT, get_column(POS, Y)], 
@@ -88,9 +131,10 @@ for index, file_name in enumerate(files):
         )).T
 
         get_pairwise_matrix[blockspergrid, threadsperblock](pos, P_COUNT, dists)
-
-        for d in dists:
-            h, b = np.histogram(d, bins=R_STEPS, range=(R_MIN, R_MAX))
+        h_m = np.zeros([P_COUNT, R_STEPS], dtype=float)        
+        get_g_r[blockspergrid, threadsperblock](skip_diag_strided(dists), P_COUNT, h_m)
+       
+        for h in h_m:
             g = np.add(g, h * v)
    
     a = np.sqrt(
@@ -111,7 +155,8 @@ for index, file_name in enumerate(files):
 
     figure_axis_acc.add_trace(go.Histogram(x=a_axis, name=file_name), row = index + 1, col = 1)
     figure_full_acc.add_trace(go.Histogram(x=a, name=file_name), row = index + 1, col = 1)
-    figure_g_r.add_trace(go.Scatter(x=[i / R_STEPS * (R_MAX - R_MIN) + 0.5 * (R_MAX - R_MIN) / R_STEPS  for i in range(0, R_STEPS)], y=g, mode="markers", name=file_name), row = index + 1, col = 1)
+    k = (P_COUNT ** 2) * FRAMES_COUNT *  (SIZE ** 3) * 8
+    figure_g_r.add_trace(go.Scatter(x=[i / R_STEPS * R_MAX + 0.5 * R_MAX / R_STEPS  for i in range(0, R_STEPS)], y=g / k), mode="markers", name=file_name), row = index + 1, col = 1)
 
 figure_full_acc.update_layout(height=700 * len(files), title = "Acc module distribution")
 figure_full_acc.show()
@@ -119,5 +164,5 @@ figure_full_acc.show()
 figure_axis_acc.update_layout(height=700 * len(files), title = "Acc value distribution")
 figure_axis_acc.show()
 
-figure_axis_acc.update_layout(height=700 * len(files), title = "g(r)")
+figure_g_r.update_layout(height=700 * len(files), title = "g(r)")
 figure_g_r.show()
