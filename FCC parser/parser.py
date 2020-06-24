@@ -155,16 +155,31 @@ for index, file_name in enumerate(files):
     print(result.fit_report())    
 
     figure_axis_acc.add_trace(go.Bar(x=b[0:len(b) - 1], y = h, name=file_name), row = index + 1, col = 1)
-    figure_axis_acc.add_trace(go.Scatter(x=b, y=[gaussian(b, A, s) for b in b], name=file_name), row = index + 1, col = 1)
+    figure_axis_acc.add_trace(go.Scatter(x=b, y=[gaussian(b, A, s) for b in b], name=file_name, line=dict(width=4)), row = index + 1, col = 1)
     figure_full_acc.add_trace(go.Histogram(x=a, name=file_name), row = index + 1, col = 1)
     k = (P_COUNT ** 2) * (FRAMES_COUNT) /  (SIZE ** 3)
-    figure_g_r.add_trace(go.Scatter(x=[i / R_STEPS * R_MAX + 0.5 * R_MAX / R_STEPS  for i in range(0, R_STEPS)], y=g / k, mode="markers", name=file_name), row = index + 1, col = 1)
+    figure_g_r.add_trace(go.Scatter(x=[i / R_STEPS * R_MAX + 0.5 * R_MAX / R_STEPS  for i in range(0, R_STEPS)], y=g / k, line=dict(width=4), name=file_name), row = index + 1, col = 1)
 
 figure_full_acc.update_layout(height=700 * len(files), title = "Acc module distribution")
 figure_full_acc.show()
 
+figure_full_acc.update_xaxes(showline=True, linewidth=6, linecolor='black', mirror=True, showgrid=False)
+figure_full_acc.update_yaxes(showline=True, linewidth=6, linecolor='black', mirror=True, rangemode="nonnegative", showgrid=False)
+figure_full_acc.update_layout(font=dict(size=50), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+figure_full_acc.write_image("img/full_acc.png", width=1080 * 3, height=700*len(files)*3)
+
 figure_axis_acc.update_layout(height=700 * len(files), title = "Acc value distribution")
 figure_axis_acc.show()
 
+figure_axis_acc.update_xaxes(showline=True, linewidth=6, linecolor='black', mirror=True, showgrid=False)
+figure_axis_acc.update_yaxes(showline=True, linewidth=6, linecolor='black', mirror=True, rangemode="nonnegative", showgrid=False)
+figure_axis_acc.update_layout(font=dict(size=50), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+figure_axis_acc.write_image("img/axis_acc.png", width=1080 * 3, height=700*len(files)*3)
+
 figure_g_r.update_layout(height=700 * len(files), title = "g(r)")
 figure_g_r.show()
+
+figure_g_r.update_xaxes(showline=True, linewidth=6, linecolor='black', mirror=True, showgrid=False)
+figure_g_r.update_yaxes(showline=True, linewidth=6, linecolor='black', mirror=True, rangemode="nonnegative", showgrid=False)
+figure_g_r.update_layout(font=dict(size=50), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+figure_g_r.write_image("img/g_r.png", width=1080 * 3, height=700*len(files)*3)
