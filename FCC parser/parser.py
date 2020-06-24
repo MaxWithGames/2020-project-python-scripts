@@ -4,8 +4,9 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import glob
 from numba import njit, jit, cuda
+from lmfit import Model, Parameter, report_fit
 
-SIZE = 8.5 / 2
+SIZE = 11.3137
 
 POS = 0
 VELOCITY = 1
@@ -15,7 +16,7 @@ X = 0
 Y = 1
 Z = 2
 
-R_MAX = (SIZE / 2)
+R_MAX = SIZE / 2
 R_STEPS = 1000
 
 def get_column(a, b):
@@ -48,34 +49,30 @@ def skip_diag_strided(A):
     s0,s1 = A.strides
     return strided(A.ravel()[1:], shape=(m-1,m), strides=(s0+s1,s1)).reshape(m,-1)
 
-@cuda.jit
-def get_pairwise_matrix(p, count, res):
-    tx = cuda.threadIdx.x
-    ty = cuda.blockIdx.x
-    bw = cuda.blockDim.x
-    idx = tx + ty * bw
-
-    for i in range(0, count):
-        d1 = (p[idx][0] - p[i][0]) / SIZE
-        d2 = (p[idx][1] - p[i][1]) / SIZE 
-        d3 = (p[idx][2] - p[i][2]) / SIZE
-
-        d1 = d1 - int(d1)
-        d2 = d2 - int(d2)
-        d3 = d3 - int(d3)
-        res[idx][i] = ((d1*d1 + d2*d2 + d3*d3) ** (0.5)) * SIZE
+def gaussian(x, A, s):
+    return A * np.exp(-x*x/s/s/2)
 
 @cuda.jit
-def get_g_r(d, count, res):
+def get_g_r(p, count, res):
     tx = cuda.threadIdx.x
     ty = cuda.blockIdx.x
     bw = cuda.blockDim.x
     idx = tx + ty * bw
     
-    for i in range(0, count - 1):
-        j = int(d[idx][i] / R_MAX * R_STEPS)
-        if j < R_STEPS:
-            res[idx][j] = res[idx][j] + 1
+    for i in range(0, count):
+        if (i != idx):
+            d1 = (p[idx][0] - p[i][0]) / SIZE
+            d2 = (p[idx][1] - p[i][1]) / SIZE 
+            d3 = (p[idx][2] - p[i][2]) / SIZE
+
+            d1 = d1 - round(d1)
+            d2 = d2 - round(d2)
+            d3 = d3 - round(d3)
+
+            d = ((d1*d1 + d2*d2 + d3*d3) ** (0.5)) * SIZE
+            j = int(d / R_MAX * R_STEPS)
+            if j < R_STEPS:
+                res[idx][j] = res[idx][j] + 1
 
 files_path = 'data/'
 files_format = '.xyz'
@@ -125,35 +122,42 @@ for index, file_name in enumerate(files):
         pos = np.vstack((
             data[frame, 0:P_COUNT, get_column(POS, X)], 
             data[frame, 0:P_COUNT, get_column(POS, Y)], 
-            data[frame, 0:P_COUNT, get_column(POS, Z)]
+            data[frame, 0:P_COUNT, get_column(POS, Z)] 
         )).T
 
-        get_pairwise_matrix[blockspergrid, threadsperblock](pos, P_COUNT, dists)
-        h_m = np.zeros([P_COUNT, R_STEPS], dtype=float)        
-        get_g_r[blockspergrid, threadsperblock](skip_diag_strided(dists), P_COUNT, h_m)
+        h_m = np.zeros([P_COUNT, R_STEPS], dtype=float)     
+        get_g_r[blockspergrid, threadsperblock](pos, P_COUNT, h_m)
        
         for h in h_m:
             g = np.add(g, h * v)
    
     a = np.sqrt(
         np.add(
-            np.square(data[0:FRAMES_COUNT, 0:P_COUNT, get_column(ACC, X)]), 
+            np.square(data[1:FRAMES_COUNT, 0:P_COUNT, get_column(ACC, X)]), 
             np.add(
-                np.square(data[0:FRAMES_COUNT, 0:P_COUNT, get_column(ACC, Y)]), 
-                np.square(data[0:FRAMES_COUNT, 0:P_COUNT, get_column(ACC, Z)])
+                np.square(data[1:FRAMES_COUNT, 0:P_COUNT, get_column(ACC, Y)]), 
+                np.square(data[1:FRAMES_COUNT, 0:P_COUNT, get_column(ACC, Z)])
             )
         )
     ).flatten()
 
     a_axis = np.concatenate((
-        data[0:FRAMES_COUNT, 0:P_COUNT, get_column(ACC, X)].flatten(),
-        data[0:FRAMES_COUNT, 0:P_COUNT, get_column(ACC, Y)].flatten(),
-        data[0:FRAMES_COUNT, 0:P_COUNT, get_column(ACC, Z)].flatten()
+        data[1:FRAMES_COUNT, 0:P_COUNT, get_column(ACC, X)].flatten(),
+        data[1:FRAMES_COUNT, 0:P_COUNT, get_column(ACC, Y)].flatten(),
+        data[1:FRAMES_COUNT, 0:P_COUNT, get_column(ACC, Z)].flatten()
     ), axis=None)
+    
+    h, b = np.histogram(a_axis, bins=1000)
+    gmodel = Model(gaussian, independent_vars=['x'])    
+    result = gmodel.fit(h, x=b[0:len(b) - 1], A = 10000, s = 3)
+    A = float(result.params["A"])
+    s = float(result.params["s"])
+    print(result.fit_report())    
 
-    figure_axis_acc.add_trace(go.Histogram(x=a_axis, name=file_name), row = index + 1, col = 1)
+    figure_axis_acc.add_trace(go.Bar(x=b[0:len(b) - 1], y = h, name=file_name), row = index + 1, col = 1)
+    figure_axis_acc.add_trace(go.Scatter(x=b, y=[gaussian(b, A, s) for b in b], name=file_name), row = index + 1, col = 1)
     figure_full_acc.add_trace(go.Histogram(x=a, name=file_name), row = index + 1, col = 1)
-    k = (P_COUNT ** 2) * FRAMES_COUNT *  (SIZE ** 3) * 8
+    k = (P_COUNT ** 2) * (FRAMES_COUNT) /  (SIZE ** 3)
     figure_g_r.add_trace(go.Scatter(x=[i / R_STEPS * R_MAX + 0.5 * R_MAX / R_STEPS  for i in range(0, R_STEPS)], y=g / k, mode="markers", name=file_name), row = index + 1, col = 1)
 
 figure_full_acc.update_layout(height=700 * len(files), title = "Acc module distribution")
